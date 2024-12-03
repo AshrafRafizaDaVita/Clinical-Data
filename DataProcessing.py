@@ -1,10 +1,10 @@
 import pandas as pd
 import numpy as np
 import os
-from config import APAC_DIRECTORIES
+from config import APAC_DIRECTORIES, DATA_FOLDER
 from datetime import datetime
 
-# Read data from Shared Folder
+# Read APAC data from Shared Folder
 # Read and combine APAC files from APAC folder
 def read_apac_folders(month):
     selected_month = month
@@ -63,7 +63,7 @@ def read_apac_folders(month):
 
     return combined_df
 
-# Check for Blank Cells
+# Check for Blank Cells in APAC
 def check_blanks(df):
     # Columns to check
     columns_to_check = [
@@ -101,7 +101,7 @@ def check_blanks(df):
 
     return blank_rows_df
 
-# Check for value errors
+# Check for value errors in APAC
 # Check blanks
 def check_values(df):
     # Columns to check
@@ -186,3 +186,48 @@ def check_values(df):
     error_rows_df = pd.DataFrame(error_list, columns=df.columns)
 
     return error_rows_df
+
+# Read Billing Report to get HD counts
+def readBillingReport(month):
+    folderpath = os.path.join(DATA_FOLDER, 'Billing Report')
+    files = [file for file in os.listdir(folderpath) if file.startswith(f"{month} Billing Report") and file.endswith('.csv')]
+
+    df = pd.read_csv(os.path.join(folderpath, files[0]), skiprows=2)
+
+    # Filter item only HD
+    df = df[df['Item Description'] == 'HAEMODIALYSIS']
+
+    df = df.groupby('MR No.')['Bill No.'].count().reset_index(name="HD Count")
+
+    return df
+
+# Read Patient Details
+def readPatientDetails(month):
+    folderpath = os.path.join(DATA_FOLDER, 'Patient Details All Center')
+    files = [file for file in os.listdir(folderpath) if file.startswith(f"{month} patient details") and file.endswith('.csv')]
+
+    df = pd.read_csv(os.path.join(folderpath, files[0]), skiprows=1)
+
+    # Last Visit Month
+    df['Last Visit Month'] = pd.to_datetime(df['Last Visit Date'], dayfirst=True).dt.to_period('M')
+
+    return df
+
+# Get Active Patients
+def activePatients(month):
+    pt_det = readPatientDetails(month)
+    hd_count = readBillingReport(month)
+
+    # Merge to get HD Count
+    df = pd.merge(pt_det, hd_count, on='MR No.', how='left')
+
+    # Clean Patient Details
+    df = df[df['Primary Center'] != 'DSSKL']
+    df = df[(df['Last Visit Month'] == month) | df['HD Count'].notna()]
+    df = df[df['Discharge Type'].isna()]
+    # df = df[df['Patient Category'] == 'General']
+
+    # Print stats
+    print(f"Total Unique Active Patient {month}: {len(df['MR No.'].unique())}")
+
+    return df
