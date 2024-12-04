@@ -4,6 +4,21 @@ import os
 from config import APAC_DIRECTORIES, DATA_FOLDER
 from datetime import datetime
 
+# To convert from '2024-11' to '2024_Nov
+def convert_date(date):
+    # Input string
+    date_str = date
+
+    # Convert to datetime object
+    date_obj = datetime.strptime(date_str, '%Y-%m')
+
+    # Format to desired output
+    formatted_date = date_obj.strftime('%Y_%b')
+
+    return formatted_date
+
+
+
 # Read APAC data from Shared Folder
 # Read and combine APAC files from APAC folder
 def read_apac_folders(month):
@@ -63,6 +78,8 @@ def read_apac_folders(month):
 
     return combined_df
 
+
+
 # Check for Blank Cells in APAC
 def check_blanks(df):
     # Columns to check
@@ -101,6 +118,8 @@ def check_blanks(df):
 
     return blank_rows_df
 
+
+
 # Check for value errors in APAC
 # Check blanks
 def check_values(df):
@@ -132,19 +151,19 @@ def check_values(df):
             # Check Item 1 - PRE TX WEIGHT
             # if (row[columns_to_check[0]] < 30) & (row[columns_to_check[0]] > 200):
             if not ((30 <= row[columns_to_check[0]] <= 200)):
-                print(f'\nPre W Error : {row['MR NO']}, {row['Center Name']}, {row[columns_to_check[0]]}')
+                print(f'\nPre Weight Invalid : {row['MR NO']}, {row['Center Name']}, {row[columns_to_check[0]]} Kg')
                 error_list.append(row)
 
             # Check Item 2 - POST TX WEIGHT
             # if (row[columns_to_check[1]] < 30) & (row[columns_to_check[1]] > 200):
             if not (30 <= row[columns_to_check[1]] <= 200):
-                print(f'\nPost W Error : {row['MR NO']}, {row['Center Name']}, {row[columns_to_check[1]]}')
+                print(f'\nPost Weight Invalid : {row['MR NO']}, {row['Center Name']}, {row[columns_to_check[1]]} Kg')
                 error_list.append(row)
 
             # Item 3 - TARGET UF
             try:
                 if ((row[columns_to_check[2]] <= 0) | (row[columns_to_check[2]] > 10)):
-                    print(f'\nTarget UF Error : {row['MR NO']}, {row['Center Name']}, {row[columns_to_check[2]]}')
+                    print(f'\nTarget UF Invalid : {row['MR NO']}, {row['Center Name']}, {row[columns_to_check[2]]}')
                     error_list.append(row)
 
             except Exception as e:
@@ -179,13 +198,108 @@ def check_values(df):
 
             # Check if 'MR NO' does not start with 'MR00'
             if not row['MR NO'].startswith('MR00'):
-                print(f'\nMR NO Error: {row["MR NO"]}, {row["Center Name"]}')
+                print(f'\nMR NO Invalid: {row["MR NO"]}, {row["Center Name"]}')
                 error_list.append(row)
 
     # Display the DataFrame containing rows with any blank values
     error_rows_df = pd.DataFrame(error_list, columns=df.columns)
 
     return error_rows_df
+
+
+
+# From APAC transform to Insta like df
+def monthly_Clinical_data(month):
+    apac = read_apac_folders(convert_date(month))
+    # Remove unwanted MR No
+    apac = apac[~apac['MR NO'].isin(['TEAMMATE', 'NEW'])]
+
+    # Select columns
+    apac = apac[[
+        'Patient ID  ',
+        'MR NO',
+        'Center Name', # Center Name
+        'Reporting Month', # Reporting Month
+        'Physician Responsible', # Physician Responsible
+        '# of Txs per Week', # # of Txs per Week
+        'PREU', # Pre BUN Level (mg/dL)
+        'POSU', # Post BUN Level (mg/dL)
+        'Draw Date', # Draw Date, BUN Draw Data
+        'Pre Tx Weight (Kg)', # Pre Tx Weight (Kg)
+        'Post Tx Weight (Kg)', # Post Tx Weight (Kg)
+        'Tx Duration (mins)', # Tx Duration (mins)
+        'SP Kt/V', # Sp Kt/V
+        'Targe UF',
+        'URR', # URR
+        'HB', # Hgb (gm/dL)
+        'ALB', # Alb (gm/dL)
+        'PHOS', # Phos (mg/dL)
+        'FERR', # Ferritin (mg/L)
+        'Tsat', # Tsat %
+        'CA', # Ca (mg/dL)
+        'K', # K (mEq/L)
+        'PTH', # PTH (pg/mL)
+        'QB (mL/min)', # QB (mL/min),
+        'Ref No', # Lab No
+    ]]
+
+    # total size
+    total_length = len(apac)
+    dupe_pt = apac['MR NO'].duplicated().sum()
+    hb_notNull = len(apac[apac['HB'].notna()])
+
+    print(f"\nTotal data size: {total_length}")
+    print(f"Total duplicate: {dupe_pt}")
+    print(f"Total HB not null: {hb_notNull}, {np.round(hb_notNull/total_length * 100, 1)}%")
+
+    return apac
+
+def sepResult(df):
+    results_list = [
+        'SP Kt/V',
+        'HB', 
+        'ALB',
+        'PHOS',
+        'FERR',
+        'Tsat',
+        'CA',
+        'K',
+        'PTH',
+        'QB (mL/min)',
+    ]
+    
+    separate_dfs = {}
+    
+    for col in results_list:
+        if col in df.columns:  # Ensure the column exists in the DataFrame
+            # Create a separate DataFrame with the current column and any identifying columns
+            if col == 'SP Kt/V':
+                separate_dfs[col] = df[[
+                    'MR NO', 
+                    col,
+                    'PREU',
+                    'POSU',
+                    'Post Tx Weight (Kg)', # Post Tx Weight (Kg)
+                    'Tx Duration (mins)', # Tx Duration (mins)
+                    'Targe UF',
+                    'URR', # URR
+                    'Draw Date'
+                    ]].dropna().reset_index(drop=True)
+            else:
+                separate_dfs[col] = df[['MR NO', col, 'Draw Date']].dropna().reset_index(drop=True)
+
+                # Sort by Draw Date
+                separate_dfs[col]  = separate_dfs[col] .sort_values(by=['MR NO', 'Draw Date'], ascending=[True, False])
+
+                # Drop duplicate take the first row
+                separate_dfs[col]  = separate_dfs[col] .drop_duplicates(subset=['MR NO'], keep='first')
+        else:
+            print(f"Warning: Column '{col}' not found in the DataFrame.")
+    
+    return separate_dfs
+
+
+
 
 # Read Billing Report to get HD counts
 def readBillingReport(month):
@@ -201,6 +315,8 @@ def readBillingReport(month):
 
     return df
 
+
+
 # Read Patient Details
 def readPatientDetails(month):
     folderpath = os.path.join(DATA_FOLDER, 'Patient Details All Center')
@@ -212,6 +328,8 @@ def readPatientDetails(month):
     df['Last Visit Month'] = pd.to_datetime(df['Last Visit Date'], dayfirst=True).dt.to_period('M')
 
     return df
+
+
 
 # Get Active Patients
 def activePatients(month):
