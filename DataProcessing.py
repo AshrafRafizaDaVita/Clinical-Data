@@ -256,6 +256,7 @@ def monthly_Clinical_data(month):
 
 ## Define result_list
 results_list = [
+        'Tx Details',
         'SP Kt/V',
         'HB', 
         'ALB',
@@ -268,41 +269,53 @@ results_list = [
         'QB (mL/min)',
     ]
 
+# Explode current month medical results
 def sepResult(df):
     separate_dfs = {}
     
     for col in results_list:
-        if col in df.columns:  # Ensure the column exists in the DataFrame
-            # Create a separate DataFrame with the current column and any identifying columns
-            if col == 'SP Kt/V':
-                separate_dfs[col] = df[[
-                    'MR No.', 
-                    col,
-                    'PREU',
-                    'POSU',
-                    'Pre Tx Weight (Kg)',
-                    'Post Tx Weight (Kg)',
-                    'Tx Duration (mins)',
-                    'Targe UF',
-                    'URR', # URR
-                    'Draw Date'
-                    ]].dropna().reset_index(drop=True)
-                
-                # Rename Draw Date
-                separate_dfs[col] = separate_dfs[col].rename({'Draw Date' : f'BUN Draw Date'}, axis=1)
-            else:
-                separate_dfs[col] = df[['MR No.', col, 'Draw Date']].dropna().reset_index(drop=True)
-
-                # Sort by Draw Date
-                separate_dfs[col]  = separate_dfs[col] .sort_values(by=['MR No.', 'Draw Date'], ascending=[True, False])
-
-                # Drop duplicate take the first row
-                separate_dfs[col]  = separate_dfs[col] .drop_duplicates(subset=['MR No.'], keep='first')
-                
-                # Rename Draw Date
-                separate_dfs[col] = separate_dfs[col].rename({'Draw Date' : f'Draw Date_{col}'}, axis=1)
+        # Create a separate DataFrame with the current column and any identifying columns
+        if col == 'Tx Details':
+            separate_dfs[col] = df[[
+                'MR No.',
+                'Physician Responsible',
+                '# of Txs per Week',
+                'Pre Tx Weight (Kg)',
+                'Post Tx Weight (Kg)',
+                'Tx Duration (mins)',
+                'Targe UF'
+            ]]
         else:
-            print(f"Warning: Column '{col}' not found in the DataFrame.")
+            if (col in df.columns) & (col != 'Tx Details'):  # Ensure the column exists in the DataFrame
+                if col == 'SP Kt/V':
+                    separate_dfs[col] = df[[
+                        'MR No.', 
+                        col,
+                        'PREU',
+                        'POSU',
+                        # 'Pre Tx Weight (Kg)',
+                        # 'Post Tx Weight (Kg)',
+                        # 'Tx Duration (mins)',
+                        # 'Targe UF',
+                        'URR', # URR
+                        'Draw Date'
+                        ]].dropna().reset_index(drop=True)
+                    
+                    # Rename Draw Date
+                    separate_dfs[col] = separate_dfs[col].rename({'Draw Date' : f'BUN Draw Date'}, axis=1)
+                else:
+                    separate_dfs[col] = df[['MR No.', col, 'Draw Date']].dropna().reset_index(drop=True)
+
+                    # Sort by Draw Date
+                    separate_dfs[col]  = separate_dfs[col] .sort_values(by=['MR No.', 'Draw Date'], ascending=[True, False])
+
+                    # Drop duplicate take the first row
+                    separate_dfs[col]  = separate_dfs[col] .drop_duplicates(subset=['MR No.'], keep='first')
+                    
+                    # Rename Draw Date
+                    separate_dfs[col] = separate_dfs[col].rename({'Draw Date' : f'Draw Date_{col}'}, axis=1)
+            else:
+                print(f"Warning: Column '{col}' not found in the DataFrame.")
     
     return separate_dfs
 
@@ -495,15 +508,15 @@ def overallData(month, separate_dfs):
     # Merge Patient Details with HD Count
     pt_det = pd.merge(pt_det, hd_count, on='MR No.', how='left')
 
+    # Merge each medical outcomes with their dates in Patient Details
+    pt_det = addIn_MedicalOutcomes(pt_det, separate_dfs)
+
     # Merge Patient Details with Mortality and Hospital Admission
     pt_det = pd.merge(pt_det, death_pt, on='MR No.', how='left')
     pt_det = pd.merge(pt_det, hospital_admission, on='MR No.', how='left')
 
     # Merge Patient Details with Active Patient
-    pt_det = pd.merge(pt_det, active_patient, on='MR No.', how='left')
-
-    # Merge each medical outcomes with their dates in Patient Details
-    df = addIn_MedicalOutcomes(pt_det, separate_dfs)
+    df = pd.merge(pt_det, active_patient, on='MR No.', how='left')
 
     # Clean Patient Details. If Mortality = 1, skips the conditions
     df = df.loc[(df['Primary Center'] != 'DSSKL') | (df['Mortality'] == 1) | df['Hospitalization'] > 0]
