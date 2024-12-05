@@ -224,7 +224,6 @@ def monthly_Clinical_data(month):
         '# of Txs per Week', # # of Txs per Week
         'PREU', # Pre BUN Level (mg/dL)
         'POSU', # Post BUN Level (mg/dL)
-        'Draw Date', # Draw Date, BUN Draw Data
         'Pre Tx Weight (Kg)', # Pre Tx Weight (Kg)
         'Post Tx Weight (Kg)', # Post Tx Weight (Kg)
         'Tx Duration (mins)', # Tx Duration (mins)
@@ -232,6 +231,7 @@ def monthly_Clinical_data(month):
         'Targe UF',
         'URR', # URR
         'HB', # Hgb (gm/dL)
+        'Draw Date',
         'ALB', # Alb (gm/dL)
         'PHOS', # Phos (mg/dL)
         'FERR', # Ferritin (mg/L)
@@ -254,8 +254,8 @@ def monthly_Clinical_data(month):
 
     return apac
 
-def sepResult(df):
-    results_list = [
+## Define result_list
+results_list = [
         'SP Kt/V',
         'HB', 
         'ALB',
@@ -267,7 +267,8 @@ def sepResult(df):
         'PTH',
         'QB (mL/min)',
     ]
-    
+
+def sepResult(df):
     separate_dfs = {}
     
     for col in results_list:
@@ -288,7 +289,7 @@ def sepResult(df):
                     ]].dropna().reset_index(drop=True)
                 
                 # Rename Draw Date
-                separate_dfs[col] = separate_dfs[col].rename({'Draw Date' : f'Draw Date_{col}'}, axis=1)
+                separate_dfs[col] = separate_dfs[col].rename({'Draw Date' : f'BUN Draw Date'}, axis=1)
             else:
                 separate_dfs[col] = df[['MR No.', col, 'Draw Date']].dropna().reset_index(drop=True)
 
@@ -403,6 +404,84 @@ def getActivePt(month):
 
     return df
 
+# Read available Medical Outcomes (usually previous months)
+def available_MO():
+    # Read Death Report
+    folderpath = os.path.join(DATA_FOLDER, 'Medical Outcomes Excel')
+    files = [file for file in os.listdir(folderpath) if "Medical Outcomes" in file and file.endswith('.xlsx')]
+    
+    # Rename cols
+    col_newname = {
+        'Sp Kt/V' : 'SP Kt/V',
+        'Hgb (gm/dL)' : 'HB',
+        'Alb (gm/dL)': 'ALB',
+        'Phos (mg/dL)' : 'PHOS',
+        'Ferritin (mg/L)' : 'FERR',
+        'Tsat %' : 'Tsat',
+        'Ca (mg/dL)' : 'CA',
+        'K (mEq/L)' : 'K',
+        'PTH (pg/mL)' : 'PTH'
+    }
+
+    mo_array = []
+    
+    if files:
+        for file in files:
+            df = pd.read_excel(os.path.join(folderpath, file))
+
+            # Based on Report Date get Quarter
+            df['Report Date'] = pd.to_datetime(df['Report Date'], dayfirst=True, errors='coerce')
+
+            # Check for invalid dates and handle them
+            if df['Report Date'].isnull().any():
+                print("Invalid dates found. Please check the data.")
+            
+            # Convert 'Report Date' to period (quarter)
+            df['Report Quarter'] = df['Report Date'].dt.to_period('Q')
+
+            # Rename columns if they exist in the DataFrame
+            df = df.rename(columns={key: col_newname[key] for key in col_newname if key in df.columns})
+
+            mo_array.append(df)
+
+    mo = pd.concat(mo_array)
+
+    # Rename columns
+    mo = mo.rename({
+        'Pre BUN Level (mg/dL)' : 'PREU',
+        'Post BUN Level (mg/dL)' : 'POSU'
+    }, axis=1)
+
+    # Select necessary columns
+    mo = mo[[
+        'MR No.',
+        'PREU', 
+        'POSU', 
+        'BUN Draw Date',
+        'SP Kt/V', 
+        'URR', 
+        'HB', 
+        'Draw Date_HB', 
+        'ALB',
+        'Draw Date_ALB', 
+        'PHOS', 
+        'Draw Date_PHOS', 
+        'FERR', 
+        'Draw Date_FERR', 
+        'Tsat',
+        'Draw Date_Tsat', 
+        'CA', 
+        'Draw Date_CA', 
+        'K', 
+        'Draw Date_K', 
+        'PTH',
+        'Draw Date_PTH',
+        'Report Date' ,
+        'Report Quarter'
+    ]]
+
+    return mo
+
 
 # Get overall data
 def overallData(month, separate_dfs):
@@ -434,6 +513,9 @@ def overallData(month, separate_dfs):
     # Remove duplicate rows based on 'MR No.'
     df = df.drop_duplicates(subset='MR No.')
 
+    # Add Report Date and  Quarter column
+    df['Report Date'] = pd.to_datetime(month + "-01")
+    df['Report Quarter'] = df['Report Date'].dt.to_period('Q')
 
 
     # Print stats
@@ -474,3 +556,53 @@ def overallData(month, separate_dfs):
         ], axis=1)
 
     return df
+
+# Logic: If 'ALB' is NaN, copy 'ALB_Quarter' and 'Draw Date_ALB_Quarter' if conditions are met
+# Function to update a specific column
+def update_column(df, col):
+    # Check for missing values and update
+    if col == 'SP Kt/V': # If SP Kt/V is null but the Quarter values is present
+        condition = df[col].isna() & df[f'{col}_Quarter'].notna() & df['PREU_Quarter'].notna() & df['POSU_Quarter'].notna() & df['BUN Draw Date_Quarter'].notna() & df['URR_Quarter'].notna()
+        df.loc[condition, col] = df.loc[condition, f'{col}_Quarter']
+        df.loc[condition, 'PREU'] = df.loc[condition, 'PREU_Quarter']
+        df.loc[condition, 'POSU'] = df.loc[condition, 'POSU_Quarter']
+        df.loc[condition, 'BUN Draw Date'] = df.loc[condition, 'BUN Draw Date_Quarter']
+        df.loc[condition, 'URR'] = df.loc[condition, 'URR_Quarter']
+    else:
+        condition = df[col].isna() & df[f'{col}_Quarter'].notna() & df[f'Draw Date_{col}_Quarter'].notna()
+        df.loc[condition, col] = df.loc[condition, f'{col}_Quarter']
+        df.loc[condition, f'Draw Date_{col}'] = df.loc[condition, f'Draw Date_{col}_Quarter']
+
+    return df
+
+
+# Insert previous result if null
+def replaceNullResult(df):
+    # Load all Medical Outcomes
+    quarter_df = available_MO()
+
+    # Merge with current month data
+    df = pd.merge(df, quarter_df, on=['MR No.', 'Report Quarter'], how='left', suffixes=('', '_Quarter'))
+
+    # List of columns that needs replacement if null
+    col_list = [
+        'SP Kt/V',
+        'ALB',
+        'PHOS',
+        'FERR',
+        'Tsat',
+        'CA',
+        'K',
+        'PTH'
+    ]
+
+    # Update each column
+    for col in col_list:
+        df = update_column(df, col)
+    
+    # Drop columns with suffix '_Quarter'
+    df = df.loc[:, ~df.columns.str.endswith('_Quarter')]
+
+    return df
+
+
