@@ -394,6 +394,38 @@ def readHospitalization(month):
 
     return pt_admission
 
+
+# Read Fluid Management Target Weight Report
+def genIDWG(month):
+    folderpath = os.path.join(DATA_FOLDER, 'Fluid Management Target Weight Report')
+    files = [file for file in os.listdir(folderpath) if file.startswith(f"{month} Fluid Management Target Weight Report") and file.endswith('.xlsx')]
+    idwg = pd.read_excel(os.path.join(folderpath, files[0]), skiprows=2)
+
+    # filter rows where IDWG% is between MIN and MAX
+    min = 0
+    max = 10
+    filtered_idwg = idwg[(idwg['IDWG%'] >= min) & (idwg['IDWG%'] <= max)]
+
+    # group by MR NO and calculate the mean of IDWG%
+    mean_idwg = filtered_idwg.groupby('MR NO')['IDWG%'].mean().reset_index()
+
+    #initialize the output DF with all uniqaue MR NOs
+    output_df = pd.DataFrame({
+        'MR NO': idwg['MR NO'].unique()
+    })
+
+    # Merge with the grouped DF to ensure all MR NOs are included
+    resultIdwg_df = pd.merge(output_df, mean_idwg, on='MR NO', how='left')
+
+    # Fill NaN values for MR NOs with no IDWG% in the range
+    resultIdwg_df['IDWG%'] = resultIdwg_df['IDWG%'].fillna(np.nan)
+    resultIdwg_df['IDWG%'] = round(resultIdwg_df['IDWG%'],2)
+
+    # Rename column to IDH
+    resultIdwg_df = resultIdwg_df.rename({'MR NO': 'MR No.','IDWG%' : 'IDH'}, axis=1)
+
+    return resultIdwg_df
+
 # # Get Active patients
 def getActivePt(month):
     pt_det = readPatientDetails(month)
@@ -504,6 +536,7 @@ def overallData(month, separate_dfs):
     death_pt = getDeathPtDetail(month)
     hospital_admission = readHospitalization(month)
     active_patient = getActivePt(month)
+    idwg = genIDWG(month)
 
     # Merge Patient Details with HD Count
     pt_det = pd.merge(pt_det, hd_count, on='MR No.', how='left')
@@ -514,6 +547,9 @@ def overallData(month, separate_dfs):
     # Merge Patient Details with Mortality and Hospital Admission
     pt_det = pd.merge(pt_det, death_pt, on='MR No.', how='left')
     pt_det = pd.merge(pt_det, hospital_admission, on='MR No.', how='left')
+
+    # Merge Patient Details with IDWG
+    pt_det = pd.merge(pt_det, idwg, on='MR No.', how='left')
 
     # Merge Patient Details with Active Patient
     df = pd.merge(pt_det, active_patient, on='MR No.', how='left')
