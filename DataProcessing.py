@@ -426,6 +426,48 @@ def genIDWG(month):
 
     return resultIdwg_df
 
+
+# Get EPO from Sales Report
+def getEPO(month):
+    folderpath = os.path.join(DATA_FOLDER, 'Sales Report')
+    files = [file for file in os.listdir(folderpath) if file.startswith(f"{month} DVA_Sales Report") and file.endswith('.xlsx')]
+    
+    # Create an empty df to concat all sheets
+    sales_df = pd.DataFrame()
+
+    # Read all sheets and concat them in sales_df
+    with pd.ExcelFile(os.path.join(folderpath, files[0])) as xls:
+        for sheet_name in xls.sheet_names:
+            print(f"Reading sheet: {sheet_name}")
+            sheet_df = pd.read_excel(xls, sheet_name=sheet_name, skiprows=5)
+
+            # Remove Grand total row
+            sheet_df = sheet_df[sheet_df['Centre'] != 'Grand Total']
+
+            # Change MRN colname to Code
+            if 'MRN' in sheet_df.columns:
+                sheet_df = sheet_df.rename({'MRN':'Code'}, axis=1)
+
+            # Only select for EPO rows
+            sheet_df = sheet_df[sheet_df['Product'].str.contains('EPO', case=False, na=False)]
+
+            # Only select for End Of Month transaction
+            sheet_df = sheet_df[sheet_df['Date'].dt.is_month_end ]
+            
+            print(f"Sheet {sheet_name} size: {len(sheet_df)}")
+            sales_df = pd.concat([sales_df, sheet_df], ignore_index=True)
+
+        print(f"Total accumulated size: {len(sales_df)}")
+
+    epo_df = sales_df.groupby('Code')['Quantity'].sum().reset_index()
+    epo_df = epo_df.rename({
+        'Code':'MR No.',
+        'Quantity':'EPO Rate'
+    }, axis=1)
+
+    return epo_df
+
+
 # # Get Active patients
 def getActivePt(month):
     pt_det = readPatientDetails(month)
@@ -537,9 +579,14 @@ def overallData(month, separate_dfs):
     hospital_admission = readHospitalization(month)
     active_patient = getActivePt(month)
     idwg = genIDWG(month)
+    epoCount = getEPO(month)
 
     # Merge Patient Details with HD Count
     pt_det = pd.merge(pt_det, hd_count, on='MR No.', how='left')
+
+    # Merge Patient Details with EPO Count
+    pt_det = pd.merge(pt_det, epoCount, on='MR No.', how='left')
+    pt_det['EPO Rate'] = pt_det['EPO Rate'].fillna(0)
 
     # Merge each medical outcomes with their dates in Patient Details
     pt_det = addIn_MedicalOutcomes(pt_det, separate_dfs)
