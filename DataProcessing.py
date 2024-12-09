@@ -390,7 +390,7 @@ def readHospitalization(month):
     hosp_info = pd.read_csv(os.path.join(folderpath, files[0]), skiprows=2)
 
     # Count the number of records for each MR No.
-    pt_admission = hosp_info.groupby('MR No.')['Admission Date'].count().reset_index(name='Hospitalization')
+    pt_admission = hosp_info.groupby('MR No.')['Admission Date'].count().reset_index(name='Hospitalizations')
 
     return pt_admission
 
@@ -468,6 +468,15 @@ def getEPO(month):
     return epo_df
 
 
+# Get Primary Access
+def getCVCPatient(month):
+    folderpath = os.path.join(DATA_FOLDER, 'Access')
+    files = [file for file in os.listdir(folderpath) if file.startswith(f"{month}-CVC-TRACKER") and file.endswith('.xlsx')]
+    cvc_patient = pd.read_excel(os.path.join(folderpath, files[0]), sheet_name='Raw Data')
+
+    return cvc_patient
+
+
 # # Get Active patients
 def getActivePt(month):
     pt_det = readPatientDetails(month)
@@ -490,6 +499,18 @@ def getActivePt(month):
     df['Active'] = 1
 
     return df
+
+
+
+# Get Patient to remove from Interstellar
+def excludePatient(month):
+    folderpath = os.path.join(DATA_FOLDER, 'Patient Exclude')
+    files = [file for file in os.listdir(folderpath) if file.startswith(f"{month} Patient to remove") and file.endswith('.xlsx')]
+    excludePtList = pd.read_excel(os.path.join(folderpath, files[0]))
+
+    return excludePtList
+
+
 
 # Read available Medical Outcomes (usually previous months)
 def available_MO():
@@ -570,6 +591,23 @@ def available_MO():
     return mo
 
 
+# More than 90 days
+def more90D(df):
+
+    # Convert 'First Dialysis Date in Davita' to datetime and format as dd-mm-yyyy
+    df['First Dialysis Date in Davita'] = pd.to_datetime(df['First Dialysis Date in Davita'], format='%d-%m-%Y', errors='coerce')
+
+    # Calculate the difference in days between 'Report Date' and 'First Dialysis Date in Davita'
+    df['days_diff'] = (df['Report Date'] - df['First Dialysis Date in Davita']).dt.days
+
+    # Create '>90days' column with 'YES' if days_diff is greater than 90, otherwise 'NO'
+    df['>90days'] = np.where(df['days_diff'] > 90, 'YES', 'NO')
+
+    print(f"Total >90 Days Patient: {len(df[(df['>90days'] == 'YES') & (df['Primary'] == 'IJVC')])}")
+
+    return df
+
+
 # Get overall data
 def overallData(month, separate_dfs):
     # Read necessary functions
@@ -580,6 +618,8 @@ def overallData(month, separate_dfs):
     active_patient = getActivePt(month)
     idwg = genIDWG(month)
     epoCount = getEPO(month)
+    cvcPatient = getCVCPatient(month)
+    exludedPatient = excludePatient(month)
 
     # Merge Patient Details with HD Count
     pt_det = pd.merge(pt_det, hd_count, on='MR No.', how='left')
@@ -587,6 +627,13 @@ def overallData(month, separate_dfs):
     # Merge Patient Details with EPO Count
     pt_det = pd.merge(pt_det, epoCount, on='MR No.', how='left')
     pt_det['EPO Rate'] = pt_det['EPO Rate'].fillna(0)
+
+    # Add Primary Access
+    pt_det['Primary'] = np.where((pt_det['MR No.'].isin(cvcPatient['MR Number'])),'IJVC','Arteriovenous fistula')
+
+    # Add Exlude From Interstellar
+    pt_det['Exclude From Interstellar'] = pt_det['MR No.'].apply(lambda x: 'YES' if x in exludedPatient['Patient Id'].values else 'NO')
+
 
     # Merge each medical outcomes with their dates in Patient Details
     pt_det = addIn_MedicalOutcomes(pt_det, separate_dfs)
@@ -602,9 +649,9 @@ def overallData(month, separate_dfs):
     df = pd.merge(pt_det, active_patient, on='MR No.', how='left')
 
     # Clean Patient Details. If Mortality = 1, skips the conditions
-    df = df.loc[(df['Primary Center'] != 'DSSKL') | (df['Mortality'] == 1) | df['Hospitalization'] > 0]
-    df = df.loc[((df['Last Visit Month'] == month) | df['HD Count'].notna()) | (df['Mortality'] == 1) | df['Hospitalization'] > 0]
-    df = df.loc[(df['Discharge Type'].isna()) | (df['Mortality'] == 1) | df['Hospitalization'] > 0]
+    df = df.loc[(df['Primary Center'] != 'DSSKL') | (df['Mortality'] == 1) | df['Hospitalizations'] > 0]
+    df = df.loc[((df['Last Visit Month'] == month) | df['HD Count'].notna()) | (df['Mortality'] == 1) | df['Hospitalizations'] > 0]
+    df = df.loc[(df['Discharge Type'].isna()) | (df['Mortality'] == 1) | df['Hospitalizations'] > 0]
 
     # Remove duplicate rows based on 'MR No.'
     df = df.drop_duplicates(subset='MR No.')
@@ -613,12 +660,21 @@ def overallData(month, separate_dfs):
     df['Report Date'] = pd.to_datetime(month + "-01")
     df['Report Quarter'] = df['Report Date'].dt.to_period('Q')
 
+    # >90days
+    df = more90D(df)
+
+    # Fill Na
+    df.fillna({
+        'Mortality': 0, 
+        'Hospitalizations': 0,
+        'Active' : 0,
+        }, inplace=True)
 
     # Print stats
     print(f"Total Unique Patient {month}: {len(df['MR No.'].unique())}")
     print(f"Total Active patient: {len(df[df['Active'] == 1])}")
     print(f"Total Mortality: {len(df[df['Mortality'] == 1])}")
-    print(f"Total Hospital Admission: {df['Hospitalization'].sum()}")
+    print(f"Total Hospital Admission: {df['Hospitalizations'].sum()}")
 
     # Drop unnecessary columns
     df = df.drop([
@@ -634,7 +690,7 @@ def overallData(month, separate_dfs):
         'Blood Group',
         'PDPA Consent (Yes/No)',
         'Patient Sources',
-         'Marital Status',
+        'Marital Status',
         'Mobile No.',
         'Occupation',
         'Dialysis Status',
@@ -698,6 +754,74 @@ def replaceNullResult(df):
     
     # Drop columns with suffix '_Quarter'
     df = df.loc[:, ~df.columns.str.endswith('_Quarter')]
+
+    return df
+
+# Generate International Data Drop Excel
+def gene_DataDrop(df):
+    # Add columns
+    df['Secondary'] = np.nan
+    df['Location1'] = np.nan
+    df['Organism1'] = np.nan
+    df['Location2'] = np.nan
+    df['Organism2'] = np.nan
+
+    col_list = [
+        'MR No.',
+        'Primary Center',
+        'First Dialysis Date(FDODD)',
+        'First Dialysis Date in Davita',
+        'Physician Responsible',
+        '# of Txs per Week',
+        'PREU',
+        'POSU',
+        'BUN Draw Date',
+        'Pre Tx Weight (Kg)',
+        'Post Tx Weight (Kg)',
+        'IDH',
+        'Tx Duration (mins)',
+        'SP Kt/V',
+        'URR',
+        'HB',
+        'Draw Date_HB',
+        'ALB',
+        'Draw Date_ALB',
+        'PHOS',
+        'Draw Date_PHOS',
+        'FERR',
+        'Draw Date_FERR',
+        'Tsat',
+        'Draw Date_Tsat',
+        'CA',
+        'Draw Date_CA',
+        'K',
+        'Draw Date_K',
+        'PTH',
+        'Draw Date_PTH',
+        'QB (mL/min)',
+        'Draw Date_QB (mL/min)',
+        'Primary',
+        'Secondary',
+        'Location1',
+        'Organism1',
+        'Location2',
+        'Organism2',
+        'Report Date',
+        '>90days',
+        'EPO Rate',
+        'Exclude From Interstellar',
+        'Active',
+        'Mortality',
+        'Hospitalizations', 
+    ]
+
+    # Display column that not available in data
+    for col in col_list:
+        if col not in df.columns:
+            print(F"{col} not found in data!")
+
+
+    df = df[col_list]
 
     return df
 
