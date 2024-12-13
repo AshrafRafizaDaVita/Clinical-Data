@@ -1,8 +1,9 @@
 import pandas as pd
 import numpy as np
 import os
-from config import APAC_DIRECTORIES, DATA_FOLDER
+from config import APAC_DIRECTORIES, DATA_FOLDER, APAC_DIRECTORIES_C
 from datetime import datetime
+import shutil
 
 # To convert from '2024-11' to '2024_Nov
 def convert_date(date):
@@ -77,6 +78,41 @@ def read_apac_folders(month):
     print(f"\nTotal Centers: {len(combined_df['Center Name'].unique())}")
 
     return combined_df
+
+
+
+# Copy generated APAC to shared folder
+def copy_apac_to_sharefolder(sourceFolder):
+
+    apac_dir = pd.read_excel(APAC_DIRECTORIES)
+    apac_source_dir = fr"{APAC_DIRECTORIES_C}\{sourceFolder}"
+
+    files = os.listdir(apac_source_dir)
+    print(f"Total files: {len(files)}")
+
+    for file_name in files:
+        if os.path.isfile(os.path.join(apac_source_dir, file_name)):
+            base_name = file_name.split('_')[2]
+            destination_folder = apac_dir[apac_dir['Center'].str.contains(base_name, case=False, na=False)]['Link'].values
+            if len(destination_folder) > 0:
+                destination_folder = destination_folder[0]
+
+            # Define the full source and destination file paths
+            source_file_path = os.path.join(apac_source_dir, file_name)
+            destination_file_path = os.path.join(destination_folder, file_name)
+
+            print(source_file_path)
+            print(destination_file_path)
+
+            shutil.copy2(source_file_path, destination_file_path)
+            print(f"Copied {file_name} to {destination_folder}")
+
+        else:
+
+            print(f"No matching folder found for {file_name}")
+
+
+    return files
 
 
 

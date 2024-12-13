@@ -1,5 +1,7 @@
 APAC_DIRECTORIES = r"C:\Users\mrafiza\Documents\My Workspace\Programming\DAVITA-CONFIG\APAC-Directory.xlsx"
 
+APAC_DIRECTORIES_C = r"C:\APAC_Data\Insta\Export"
+
 DATA_FOLDER = "./Data"
 
 REGION_LIST = {
