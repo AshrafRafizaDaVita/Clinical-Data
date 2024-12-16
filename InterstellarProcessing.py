@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+import os
+from config import DATA_FOLDER, region_list_Insta
 
 # Function to crrate table like in Interstellar tracker excel
 def generate_transposed_table(df, required_columns):
@@ -405,5 +407,132 @@ def mortality(df):
     mortality_transpose = generate_transposed_table(mortality_combined_df[['Primary Center', index_title]], required_columns)
     
     return mortality_transpose
+
+
+# HOSPITALIZATION PER PATIENT PER YEAR
+def hospitalizations(selectedMonth, df):
+
+    # Previous 11 months admission
+    folder_path = os.path.join(DATA_FOLDER, 'Eleven Months Hospitalizations')
+    file = [file for file in os.listdir(folder_path) if file.startswith(f"{selectedMonth} Hospitalization Information") and file.endswith('.csv')]
+    prev11mnths_hosp = pd.read_csv(os.path.join(folder_path, file[0]), skiprows=2)
+    
+    # Add Region in above df
+    prev11mnths_hosp['Region'] = prev11mnths_hosp['Primary Center'].map(region_list_Insta)
+    print(f"Total missing Region in prev dataset: {len(prev11mnths_hosp[prev11mnths_hosp['Region'].isna()])}")
+    
+    # dataDrop can be replace with other generated data
+    hppy_df = df[[
+        'MR No.',
+        'Hospitalizations',
+        'Primary Center',
+        'Region',
+        'Active'
+    ]]
+
+    # Active patient df is used to get the patient count
+    activePtCount_df = hppy_df[(hppy_df['Active'] == 1)]
+
+    # df below is the patients who inside our range
+    filtered_hppy_df = hppy_df[(hppy_df['Hospitalizations'] > 0)]
+
+    ### --- MONTHLY --- ###
+    # Country
+    centerPrev_hosp = prev11mnths_hosp.groupby(['Primary Center'])['MR No.'].count()
+    hppy_country = ((filtered_hppy_df['MR No.'].count() + centerPrev_hosp.sum()) / activePtCount_df['MR No.'].count()).round(2)
+    hosp_country = (filtered_hppy_df['MR No.'].count() / activePtCount_df['MR No.'].count() * 100).round(0) # Hosp %
+
+    print(f"Total active, >90days patient: {activePtCount_df['MR No.'].count()}")
+    print(f"Total current month HPPY: {filtered_hppy_df['MR No.'].count()}")
+    print(f"Total previous 11 months HPPY: {centerPrev_hosp.sum()}")
+    print(f"Overall country HPPY score: {hppy_country}")
+
+    # Region
+    region_current_adm_counts = filtered_hppy_df.groupby(['Region'])['MR No.'].count().reset_index(name='current_adm_counts')
+    regionPrev_adm_counts = prev11mnths_hosp.groupby(['Region'])['MR No.'].count().reset_index(name='regionPrev_adm_count')
+
+    region_adm = pd.merge(region_current_adm_counts, regionPrev_adm_counts, on='Region', how='left')
+
+    # Fill NaN values with 0 (in case some regions are missing in one of the DataFrames)
+    region_adm.fillna(0, inplace=True)
+
+    # Sum the counts from both DataFrames
+    region_adm['total_count'] = region_adm['current_adm_counts'] + region_adm['regionPrev_adm_count']
+
+    hppy_region = pd.merge(region_adm, activePtCount_df.groupby(['Region'])['MR No.'].count().reset_index(name='Total Patient'), on='Region', how='left')
+    hppy_region['HPPY'] = (hppy_region['total_count'] / hppy_region['Total Patient']).round(2)
+    hppy_region['Hospitalizations %'] = (hppy_region['current_adm_counts'] / hppy_region['Total Patient']).round(2)
+
+    # Center
+    center_current_adm_counts = filtered_hppy_df.groupby(['Primary Center'])['MR No.'].count().reset_index(name='current_adm_counts')
+    centerPrev_adm_counts = prev11mnths_hosp.groupby(['Primary Center'])['MR No.'].count().reset_index(name='centerPrev_adm_count')
+
+    center_adm = pd.merge(center_current_adm_counts, centerPrev_adm_counts, on='Primary Center', how='outer')
+
+    # Fill NaN values with 0 (in case some centers are missing in one of the DataFrames)
+    center_adm.fillna(0, inplace=True)
+
+    # Sum the counts from both DataFrames
+    center_adm['total_count'] = center_adm['current_adm_counts'] + center_adm['centerPrev_adm_count']
+
+    hppy_center = pd.merge(activePtCount_df.groupby(['Region','Primary Center'])['MR No.'].count().reset_index(name='Total Patient'), center_adm, on='Primary Center', how='left')
+    hppy_center['HPPY'] = (hppy_center['total_count'] / hppy_center['Total Patient']).round(2)
+    hppy_center['Hospitalizations %'] = (hppy_center['current_adm_counts'] / hppy_center['Total Patient']).round(2)
+    
+    # Combine all scores in one df for easier view
+    # Create a DataFrame for country HB score
+    index_title1 = 'HPPY'
+
+    hppy_country_df = pd.DataFrame({
+        'Primary Center': ['Overall Country'],
+        index_title1: [hppy_country]
+    })
+
+    # Create a DataFrame for region HB scores
+    hppy_region_df = hppy_region[['Region', 'HPPY']]
+    # hppy_region_df.rename(columns={'index': index_title}, inplace=True)
+    hppy_region_df['Primary Center'] = hppy_region_df['Region']
+    hppy_region_df = hppy_region_df.drop(columns='Region')
+    hppy_region_df
+
+    # Create a DataFrame for center HB scores
+    hppy_centre_df = hppy_center[['Primary Center', 'HPPY']]
+    hppy_centre_df
+
+    # Combine country, region, and center into a single DataFrame
+    hppy_combined_df = pd.concat([hppy_country_df, hppy_region_df, hppy_centre_df], ignore_index=True)
+    hppy_combined_df
+
+    # To generate table as in Interstellar Excel
+    hppy_transpose = generate_transposed_table(hppy_combined_df[['Primary Center', index_title1]], required_columns)
+    
+    # Combine all scores in one df for easier view
+    # Create a DataFrame for country HB score
+    index_title2 = 'Hospitalizations %'
+
+    hosp_country_df = pd.DataFrame({
+        'Primary Center': ['Overall Country'],
+        index_title2: [hosp_country]
+    })
+
+    # Create a DataFrame for region HB scores
+    hosp_region_df = hppy_region[['Region', index_title2]]
+    # hppy_region_df.rename(columns={'index': index_title}, inplace=True)
+    hosp_region_df['Primary Center'] = hosp_region_df['Region']
+    hosp_region_df = hosp_region_df.drop(columns='Region')
+    hosp_region_df
+
+    # Create a DataFrame for center HB scores
+    hosp_centre_df = hppy_center[['Primary Center', index_title2]]
+    hosp_centre_df
+
+    # Combine country, region, and center into a single DataFrame
+    hosp_combined_df = pd.concat([hosp_country_df, hosp_region_df, hosp_centre_df], ignore_index=True)
+    hosp_combined_df
+
+    # To generate table as in Interstellar Excel
+    hosp_transpose = generate_transposed_table(hosp_combined_df[['Primary Center', index_title2]], required_columns)
+
+    return hppy_transpose, hosp_transpose
 
 
