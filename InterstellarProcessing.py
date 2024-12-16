@@ -278,3 +278,72 @@ def phos(df):
     return phos_transpose
 
 
+# IDWG <= 5%
+def idwg(df):
+    # dataDrop can be replace with other generated data
+    idwg_df = df[[
+        'MR No.',
+        'IDH',
+        'Primary Center',
+        '>90days',
+        'Region',
+        'Exclude From Interstellar',
+        'Active'
+    ]]
+
+    idwg_df['IDH'] = pd.to_numeric(idwg_df['IDH'], errors='coerce')
+
+    #Conditions
+    idwg_df = idwg_df[
+        (idwg_df['>90days'] == "YES") &
+        (idwg_df['Exclude From Interstellar'] == 'NO') &
+        (idwg_df['Active'] == 1)]
+
+    # df below is the patients who inside our range
+    filtered_idwg_df = idwg_df[
+        (idwg_df['IDH'].notna()) &  # Exclude non-numeric values and NaN
+        (idwg_df['IDH'] <= 5)
+    ]
+
+    ### --- MONTHLY --- ###
+    # Country
+    idwg_country = (filtered_idwg_df['MR No.'].count() / idwg_df['MR No.'].count() * 100).round(0)
+
+    print(f"Total active, >90days patient: {idwg_df['MR No.'].count()}")
+    print(f"Total patient who in range: {filtered_idwg_df['MR No.'].count()}")
+    print(f"Overall country HB score: {idwg_country}%")
+
+    # Region
+    idwg_region = (filtered_idwg_df.groupby(['Region'])['MR No.'].count() / idwg_df.groupby(['Region'])['MR No.'].count() * 100).round(0)
+    idwg_region
+
+    # # Primary Center
+    idwg_centre = (filtered_idwg_df.groupby(['Region', 'Primary Center'])['MR No.'].count() / idwg_df.groupby(['Region', 'Primary Center'])['MR No.'].count() * 100).round(0)
+    idwg_centre
+
+    # Combine all scores in one df for easier view
+    # Create a DataFrame for country HB score
+    index_title = 'IDWG Score'
+    idwg_country_df = pd.DataFrame({
+        'Primary Center': ['Overall Country'],
+        index_title: [idwg_country]
+    })
+
+    # Create a DataFrame for region HB scores
+    idwg_region_df = idwg_region.reset_index(name=index_title)
+    idwg_region_df['Primary Center'] = idwg_region_df['Region']
+    idwg_region_df = idwg_region_df.drop(columns='Region')
+
+    # Create a DataFrame for center HB scores
+    idwg_centre_df = idwg_centre.reset_index(name=index_title)
+
+    # Combine country, region, and center into a single DataFrame
+    idwg_combined_df = pd.concat([idwg_country_df, idwg_region_df, idwg_centre_df], ignore_index=True)
+    idwg_combined_df
+
+    # To generate table as in Interstellar Excel
+    idwg_transpose = generate_transposed_table(idwg_combined_df[['Primary Center', index_title]], required_columns)
+    
+    return idwg_transpose
+
+
