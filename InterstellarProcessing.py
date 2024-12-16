@@ -343,7 +343,67 @@ def idwg(df):
 
     # To generate table as in Interstellar Excel
     idwg_transpose = generate_transposed_table(idwg_combined_df[['Primary Center', index_title]], required_columns)
-    
+
     return idwg_transpose
+
+# MORTALITY
+def mortality(df):
+    # dataDrop can be replace with other generated data
+    mortality_df = df[[
+        'MR No.',
+        'Mortality',
+        'Primary Center',
+        'Region',
+        'Active'
+    ]]
+
+    # Active patient df is used to get the patient count
+    activePtCount_df = mortality_df[(mortality_df['Active'] == 1)]
+
+    # df below is the patients who inside our range
+    filtered_mortality_df = mortality_df[(mortality_df['Mortality'] == 1)]
+
+    ### --- MONTHLY --- ###
+    # Country
+    mortality_country = (filtered_mortality_df['MR No.'].count() / activePtCount_df['MR No.'].count() * 100).round(1)
+
+    print(f"Total active, >90days patient: {activePtCount_df['MR No.'].count()}")
+    print(f"Total deaths: {filtered_mortality_df['MR No.'].count()}")
+    print(f"Overall country mortality %: {mortality_country}%")
+
+    # Region
+    mortality_region = (filtered_mortality_df.groupby(['Region'])['MR No.'].count() / activePtCount_df.groupby(['Region'])['MR No.'].count() * 100).round(1)
+    mortality_region
+
+    # # Primary Center
+    mortality_centre = (filtered_mortality_df.groupby(['Region', 'Primary Center'])['MR No.'].count() / activePtCount_df.groupby(['Region', 'Primary Center'])['MR No.'].count() * 100).round(1)
+    mortality_centre
+
+    # Combine all scores in one df for easier view
+    # Create a DataFrame for country HB score
+    index_title = 'Mortality Rate'
+    mortality_country_df = pd.DataFrame({
+        'Primary Center': ['Overall Country'],
+        index_title: [mortality_country]
+    })
+
+    # Create a DataFrame for region HB scores
+    mortality_region_df = mortality_region.reset_index(name=index_title)
+    mortality_region_df['Primary Center'] = mortality_region_df['Region']
+    mortality_region_df = mortality_region_df.drop(columns='Region')
+    mortality_region_df[index_title] = mortality_region_df[index_title].fillna(0) # Fill 0 if rate got NaN
+
+    # Create a DataFrame for center HB scores
+    mortality_centre_df = mortality_centre.reset_index(name=index_title)
+    mortality_centre_df[index_title] = mortality_centre_df[index_title].fillna(0) # Fill 0 if rate got NaN
+
+    # Combine country, region, and center into a single DataFrame
+    mortality_combined_df = pd.concat([mortality_country_df, mortality_region_df, mortality_centre_df], ignore_index=True)
+    mortality_combined_df
+
+    # To generate table as in Interstellar Excel
+    mortality_transpose = generate_transposed_table(mortality_combined_df[['Primary Center', index_title]], required_columns)
+    
+    return mortality_transpose
 
 
