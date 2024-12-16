@@ -78,8 +78,6 @@ required_columns = [
 # MISSING LAB TEST
 def missLab(df):
 
-    print(df['HB'].dtype)
-
     missLab_df = df[[
         'MR No.',
         'HB', # If patient have HB result then the patient consider not missing # type: ignore
@@ -140,6 +138,75 @@ def missLab(df):
     missLab_transpose = generate_transposed_table(missLab_combined_df[['Primary Center', 'Missing Lab Test']], required_columns)
     missLab_transpose
 
-    return missLab_centre_df
+    return missLab_transpose
+
+
+# HB 10-12 with EPO
+def hb(df):
+
+    hb_df = df[[
+    'MR No.',
+    'HB', # type: ignore
+    'Primary Center',
+    '>90days',
+    'Region',
+    'EPO Rate',
+    'Exclude From Interstellar',
+    'Active'
+    ]]
+
+    hb_df['HB'] = pd.to_numeric(hb_df['HB'], errors='coerce')
+
+    #Conditions
+    hb_df = hb_df[
+        (hb_df['>90days'] == "YES") &
+        (hb_df['EPO Rate'] > 0) &
+        (hb_df['Exclude From Interstellar'] == 'NO') &
+        (hb_df['Active'] == 1)]
+    
+    # df below is the patients who inside our range
+    filtered_hb_df = hb_df[
+        (hb_df['HB'].notna()) &  # Exclude non-numeric values and NaN
+        (hb_df['HB'] >= 10) &  # Include numeric values >= 10
+        (hb_df['HB'] <= 12) # Include numeric values <= 12
+    ]
+
+    ### --- MONTHLY HB --- ###
+    # Country
+    hb_country = (filtered_hb_df['HB'].count() / len(hb_df) * 100).round(0)
+
+    print(f"Total active, >90days with EPO patient: {len(hb_df)}")
+    print(f"Total patient who in range: {filtered_hb_df['HB'].count()}")
+    print(f"Overall country HB score: {hb_country}%")
+
+    # Region
+    hb_region = (filtered_hb_df.groupby(['Region'])['HB'].count() / hb_df.groupby(['Region'])['HB'].count() * 100).round(0)
+    
+    # Primary Center
+    hb_centre = (filtered_hb_df.groupby(['Region', 'Primary Center'])['HB'].count() / hb_df.groupby(['Region', 'Primary Center'])['HB'].count() * 100).round(0)
+    
+
+    # Combine all scores in one df for easier view
+    # Create a DataFrame for country HB score
+    hb_country_df = pd.DataFrame({
+        'Primary Center': ['Overall Country'],
+        'HB Score': [hb_country]
+    })
+
+    # Create a DataFrame for region HB scores
+    hb_region_df = hb_region.reset_index(name='HB Score')
+    hb_region_df['Primary Center'] = hb_region_df['Region']
+    hb_region_df = hb_region_df.drop(columns='Region')
+
+    # Create a DataFrame for center HB scores
+    hb_centre_df = hb_centre.reset_index(name='HB Score')
+
+    # Combine country, region, and center into a single DataFrame
+    hb_combined_df = pd.concat([hb_country_df, hb_region_df, hb_centre_df], ignore_index=True)
+
+    # To generate table as in Interstellar Excel
+    hb_transpose = generate_transposed_table(hb_combined_df[['Primary Center', 'HB Score']], required_columns)
+    
+    return hb_transpose
 
 
