@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 import os
-from config import APAC_DIRECTORIES, DATA_FOLDER, APAC_DIRECTORIES_C
+from config import APAC_DIRECTORIES, DATA_FOLDER, APAC_DIRECTORIES_C, region_list_Insta
 from datetime import datetime
 import shutil
 
@@ -383,6 +383,7 @@ def readPatientDetails(month):
     # Last Visit Month
     df['Last Visit Month'] = pd.to_datetime(df['Last Visit Date'], dayfirst=True).dt.to_period('M')
 
+
     return df
 
 
@@ -700,6 +701,9 @@ def overallData(month, separate_dfs):
     # >90days
     df = more90D(df)
 
+    # Add Region column based on Primary Center
+    df['Region'] = df['Primary Center'].map(region_list_Insta)
+
     # Fill Na
     df.fillna({
         'Mortality': 0, 
@@ -720,7 +724,7 @@ def overallData(month, separate_dfs):
         'Age',
         'Gender',
         'National/Passport ID Type',
-        'National/Passport ID [NRIC: ******-**-****][Police ID: RF/******][Army ID: T*******]',
+        # 'National/Passport ID [NRIC: ******-**-****][Police ID: RF/******][Army ID: T*******]',
         'Patient Category',
         'Virology Status Date',
         'Virology Status',
@@ -864,8 +868,34 @@ def gene_DataDrop(df):
     df['Location2'] = np.nan
     df['Organism2'] = np.nan
 
+    colDropList = [
+        'HB',
+        'Draw Date_HB',
+        'PHOS',
+        'Draw Date_PHOS'
+    ]
+
+    for col in colDropList:
+        if col in df.columns:
+            df.drop(col, axis=1, inplace=True)
+
+    # Rename cols
+    df = df.rename({
+        'Selected_HB': 'HB',
+        'Selected_HB_Draw Date': 'Draw Date_HB',
+
+        'Selected_PHOS' : 'PHOS',
+        'Selected_PHOS_Draw Date' : 'Draw Date_PHOS',
+    }, axis=1)
+
+    # Convert to numeric
+    df['HB'] = pd.to_numeric(df['HB'], errors='coerce')
+
+
     col_list = [
         'MR No.',
+        'Patient Name W/O Title',
+        'National/Passport ID [NRIC: ******-**-****][Police ID: RF/******][Army ID: T*******]',
         'Primary Center',
         'First Dialysis Date(FDODD)',
         'First Dialysis Date in Davita',
@@ -880,12 +910,12 @@ def gene_DataDrop(df):
         'Tx Duration (mins)',
         'SP Kt/V',
         'URR',
-        'Selected_HB',
-        'Selected_HB_Draw Date',
+        'HB',
+        'Draw Date_HB',
         'ALB',
         'Draw Date_ALB',
-        'Selected_PHOS',
-        'Selected_PHOS_Draw Date',
+        'PHOS',
+        'Draw Date_PHOS',
         'FERR',
         'Draw Date_FERR',
         'Tsat',
@@ -910,14 +940,14 @@ def gene_DataDrop(df):
         'Exclude From Interstellar',
         'Active',
         'Mortality',
-        'Hospitalizations', 
+        'Hospitalizations',
+        'Region' 
     ]
 
     # Display column that not available in data
     for col in col_list:
         if col not in df.columns:
             print(F"{col} not found in data!")
-
 
     df = df[col_list]
 
