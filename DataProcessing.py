@@ -694,6 +694,7 @@ def overallData(month, separate_dfs):
 
     # Add Report Date and  Quarter column
     df['Report Date'] = pd.to_datetime(month + "-01")
+    df['Report Month'] = df['Report Date'].dt.to_period('M')
     df['Report Quarter'] = df['Report Date'].dt.to_period('Q')
 
     # >90days
@@ -793,6 +794,67 @@ def replaceNullResult(df):
 
     return df
 
+
+# Update HB
+def update_hb(masterData, hb_data):
+    # Merge hb_data into masterData
+    df = pd.merge(masterData, hb_data, left_on=['MR No.', 'Report Month'], right_on=['MR No.', 'Month'], how='left', suffixes=('', '_Monthly_HB'))
+
+    # Rename Draw Date to Draw Date_Monthly_HB
+    df = df.rename(columns={'Draw Date': 'Draw Date_Monthly_HB'})
+
+    # Define a helper function to choose the HB closest to 10–12
+    def select_hb(row):
+        if pd.isna(row['HB']) and not pd.isna(row['HB_Monthly_HB']):
+            # First scenario: HB is null but HB_Monthly_HB is not null
+            return row['HB_Monthly_HB'], row['Draw Date_Monthly_HB']
+        
+        elif not pd.isna(row['HB']) and not pd.isna(row['HB_Monthly_HB']):
+            # Second scenario: Both HB and HB_Monthly_HB are not null
+            hb_distance = abs(row['HB'] - 11)  # Distance of HB from the midpoint 11
+            hb_monthly_distance = abs(row['HB_Monthly_HB'] - 11)  # Same for HB_Monthly_HB
+            if hb_distance <= hb_monthly_distance:
+                return row['HB'], row['Draw Date_HB']
+            else:
+                return row['HB_Monthly_HB'], row['Draw Date_Monthly_HB']
+        else:
+            # If HB is not null and HB_Monthly_HB is null or both are null, keep HB
+            return row['HB'], row['Draw Date_HB']
+    
+    # Apply the helper function row-wise to determine Select_HB
+    df[['Selected_HB', 'Selected_HB_Draw Date']] = df.apply(select_hb, axis=1, result_type="expand")
+
+    return df
+
+# Update PHOS
+def update_phos(masterData, phos_data):
+    # Merge phos_data into masterData
+    df = pd.merge(masterData, phos_data, left_on=['MR No.', 'Report Quarter'], right_on=['MR No.', 'Quarter'], how='left', suffixes=('', '_Quarterly_PHOS'))
+
+    # # Rename Draw Date to Draw Date_Quarterly_PHOS
+    df = df.rename(columns={'Draw Date': 'Draw Date_Quarterly_PHOS'})
+
+    # Define a helper function to choose the HB closest to 10–12
+    def select_phos(row):
+        if pd.isna(row['PHOS']) and not pd.isna(row['PHOS_Quarterly_PHOS']):
+            # First scenario: PHOS is null but PHOS_Monthly_HB is not null
+            return row['PHOS_Quarterly_PHOS'], row['Draw Date_Quarterly_PHOS']
+        
+        elif not pd.isna(row['PHOS']) and not pd.isna(row['PHOS_Quarterly_PHOS']):
+            # Second scenario: Both PHOS and PHOS_Quarterly_PHOS are not null
+            if row['PHOS'] <= row['PHOS_Quarterly_PHOS']:
+                return row['PHOS'], row['Draw Date_PHOS']
+            else:
+                return row['PHOS_Quarterly_PHOS'], row['Draw Date_Quarterly_PHOS']
+        else:
+            # If HB is not null and HB_Monthly_HB is null or both are null, keep HB
+            return row['PHOS'], row['Draw Date_PHOS']
+    
+    # Apply the helper function row-wise to determine Select_HB
+    df[['Selected_PHOS', 'Selected_PHOS_Draw Date']] = df.apply(select_phos, axis=1, result_type="expand")
+
+    return df
+
 # Generate International Data Drop Excel
 def gene_DataDrop(df):
     # Add columns
@@ -818,12 +880,12 @@ def gene_DataDrop(df):
         'Tx Duration (mins)',
         'SP Kt/V',
         'URR',
-        'HB',
-        'Draw Date_HB',
+        'Selected_HB',
+        'Selected_HB_Draw Date',
         'ALB',
         'Draw Date_ALB',
-        'PHOS',
-        'Draw Date_PHOS',
+        'Selected_PHOS',
+        'Selected_PHOS_Draw Date',
         'FERR',
         'Draw Date_FERR',
         'Tsat',

@@ -56,6 +56,6 @@ REGION_LIST = {
     'PAPAR': 'Region 5',
     'KOTA KINABALU': 'Region 5',
     'RAWANG': 'Region 5', # Old center change region 2024 (Prev Region 3)
-    'TAMAN SARI': 'Region 5', # New Center 2024
+    'TAMANSARI': 'Region 5', # New Center 2024
     'ANTARA GAPI': 'Region 5' # New Center 2024
 }
