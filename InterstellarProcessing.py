@@ -210,3 +210,71 @@ def hb(df):
     return hb_transpose
 
 
+# PHOS <= 1.7 mmol/L
+def phos(df):
+
+    phos_df = df[[
+    'MR No.',
+    'PHOS', # type: ignore
+    'Primary Center',
+    '>90days',
+    'Region',
+    'Exclude From Interstellar',
+    'Active'
+    ]]
+
+    phos_df['PHOS'] = pd.to_numeric(phos_df['PHOS'], errors='coerce')
+
+    #Conditions
+    phos_df = phos_df[
+        (phos_df['>90days'] == "YES") &
+        (phos_df['Exclude From Interstellar'] == 'NO') &
+        (phos_df['Active'] == 1)]
+    
+    # df below is the patients who inside our range
+    filtered_phos_df = phos_df[
+        (phos_df['PHOS'].notna()) &  # Exclude non-numeric values and NaN
+        (phos_df['PHOS'] <= 1.7)
+    ]
+
+    ### --- MONTHLY --- ###
+    # Country
+    phos_country = (filtered_phos_df['MR No.'].count() / len(phos_df['MR No.']) * 100).round(0)
+
+    print(f"Total active, >90days patient: {phos_df['MR No.'].count()}")
+    print(f"Total patient who in range: {filtered_phos_df['MR No.'].count()}")
+    print(f"Overall country HB score: {phos_country}%")
+
+    # Region
+    phos_region = (filtered_phos_df.groupby(['Region'])['MR No.'].count() / phos_df.groupby(['Region'])['MR No.'].count() * 100).round(0)
+    
+    # # Primary Center
+    phos_centre = (filtered_phos_df.groupby(['Region', 'Primary Center'])['MR No.'].count() / phos_df.groupby(['Region', 'Primary Center'])['MR No.'].count() * 100).round(0)
+    phos_centre
+
+    # Combine all scores in one df for easier view
+    # Create a DataFrame for country HB score
+    phos_country_df = pd.DataFrame({
+        'Primary Center': ['Overall Country'],
+        'Phosphorus Score': [phos_country]
+    })
+
+    # Create a DataFrame for region HB scores
+    phos_region_df = phos_region.reset_index(name='Phosphorus Score')
+    phos_region_df['Primary Center'] = phos_region_df['Region']
+    phos_region_df = phos_region_df.drop(columns='Region')
+
+    # Create a DataFrame for center HB scores
+    phos_centre_df = phos_centre.reset_index(name='Phosphorus Score')
+
+    # Combine country, region, and center into a single DataFrame
+    phos_combined_df = pd.concat([phos_country_df, phos_region_df, phos_centre_df], ignore_index=True)
+    phos_combined_df
+
+    # To generate table as in Interstellar Excel
+    phos_transpose = generate_transposed_table(phos_combined_df[['Primary Center', 'Phosphorus Score']], required_columns)
+    
+
+    return phos_transpose
+
+
