@@ -954,3 +954,42 @@ def gene_DataDrop(df):
     return df
 
 
+## PHOS not achive
+def PHOS_notInTarget(df, output_path):
+    df = df[[
+        'MR No.',
+        'Patient Name W/O Title',
+        'National/Passport ID [NRIC: ******-**-****][Police ID: RF/******][Army ID: T*******]',
+        'Primary Center',
+        'First Dialysis Date in Davita',
+        'PHOS',
+        'Draw Date_PHOS',
+        'Region',
+        '>90days'
+    ]]
+
+    df['First Dialysis Date in Davita'] = df['First Dialysis Date in Davita'].dt.strftime("%d/%m/%Y")
+    df['Draw Date_PHOS'] = df['Draw Date_PHOS'].dt.strftime("%d/%m/%Y")
+
+    # Filter row where PHOS >=1.7 and put ranking
+    df = df[df['PHOS'] > 1.7]
+    df['PHOS_Ranking'] = df['PHOS'] - 1.7
+
+    # Sort tables
+    df = df.sort_values(by=['Region', 'Primary Center', 'PHOS_Ranking'], ascending=[True, True, True])
+
+    # Create Excel
+    with pd.ExcelWriter(output_path, engine='xlsxwriter') as writer:
+        df.to_excel(writer, sheet_name='Overview', index=False)
+
+        # Loop thru Primary Center
+        for center, center_df in df.groupby('Primary Center'):
+            center_df = center_df.drop([
+                'First Dialysis Date in Davita',
+                'Region',
+                'PHOS_Ranking'
+            ], axis=1)
+            center_df.to_excel(writer, sheet_name=str(center), index=False)
+
+    return df
+

@@ -78,7 +78,7 @@ required_columns = [
 
 
 # MISSING LAB TEST
-def missLab(df):
+def interstellar_missLab(df):
 
     missLab_df = df[[
         'MR No.',
@@ -144,7 +144,7 @@ def missLab(df):
 
 
 # HB 10-12 with EPO
-def hb(df):
+def interstellar_hb(df):
 
     hb_df = df[[
     'MR No.',
@@ -213,7 +213,7 @@ def hb(df):
 
 
 # PHOS <= 1.7 mmol/L
-def phos(df):
+def interstellar_phos(df):
 
     phos_df = df[[
     'MR No.',
@@ -245,7 +245,7 @@ def phos(df):
 
     print(f"Total active, >90days patient: {phos_df['MR No.'].count()}")
     print(f"Total patient who in range: {filtered_phos_df['MR No.'].count()}")
-    print(f"Overall country HB score: {phos_country}%")
+    print(f"Overall country PHOS score: {phos_country}%")
 
     # Region
     phos_region = (filtered_phos_df.groupby(['Region'])['MR No.'].count() / phos_df.groupby(['Region'])['MR No.'].count() * 100).round(0)
@@ -281,7 +281,7 @@ def phos(df):
 
 
 # IDWG <= 5%
-def idwg(df):
+def interstellar_idwg(df):
     # dataDrop can be replace with other generated data
     idwg_df = df[[
         'MR No.',
@@ -349,7 +349,7 @@ def idwg(df):
     return idwg_transpose
 
 # MORTALITY
-def mortality(df):
+def interstellar_mortality(df):
     # dataDrop can be replace with other generated data
     mortality_df = df[[
         'MR No.',
@@ -410,7 +410,7 @@ def mortality(df):
 
 
 # HOSPITALIZATION PER PATIENT PER YEAR
-def hospitalizations(selectedMonth, df):
+def interstellar_hospitalizations(selectedMonth, df):
 
     # Previous 11 months admission
     folder_path = os.path.join(DATA_FOLDER, 'Eleven Months Hospitalizations')
