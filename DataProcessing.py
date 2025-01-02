@@ -167,7 +167,7 @@ def check_values(df):
         'QB (mL/min)',
         'SP Kt/V', 
         'URR',
-        'MR NO'
+        'MR No.'
     ]
 
     # Create a DataFrame to store rows with any blank values
@@ -234,7 +234,7 @@ def check_values(df):
 
             # Check if 'MR NO' does not start with 'MR00'
             if not row['MR No.'].startswith('MR00'):
-                print(f'\nMR NO Invalid: {row["MR NO"]}, {row["Center Name"]}')
+                print(f'\nMR NO Invalid: {row["MR No."]}, {row["Center Name"]}')
                 error_list.append(row)
 
     # Display the DataFrame containing rows with any blank values
