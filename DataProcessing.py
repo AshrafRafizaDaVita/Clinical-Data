@@ -186,13 +186,13 @@ def check_values(df):
 
             # Check Item 1 - PRE TX WEIGHT
             # if (row[columns_to_check[0]] < 30) & (row[columns_to_check[0]] > 200):
-            if not ((30 <= row[columns_to_check[0]] <= 200)):
+            if not ((29 <= row[columns_to_check[0]] <= 200)):
                 print(f'\nPre Weight Invalid : {row['MR No.']}, {row['Center Name']}, {row[columns_to_check[0]]} Kg')
                 error_list.append(row)
 
             # Check Item 2 - POST TX WEIGHT
             # if (row[columns_to_check[1]] < 30) & (row[columns_to_check[1]] > 200):
-            if not (30 <= row[columns_to_check[1]] <= 200):
+            if not (29 <= row[columns_to_check[1]] <= 200):
                 print(f'\nPost Weight Invalid : {row['MR No.']}, {row['Center Name']}, {row[columns_to_check[1]]} Kg')
                 error_list.append(row)
 
